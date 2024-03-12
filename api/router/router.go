@@ -2,18 +2,19 @@ package router
 
 import (
 	"github.com/go-chi/chi/v5"
+	"gorm.io/gorm"
 
 	"myapp/api/resource/book"
 	"myapp/api/resource/health"
 )
 
-func New() *chi.Mux {
+func New(db *gorm.DB) *chi.Mux {
 	r := chi.NewRouter()
 
 	r.Get("/livez", health.Read)
 
 	r.Route("/v1", func(r chi.Router) {
-		bookAPI := &book.API{}
+		bookAPI := book.New(db)
 		r.Get("/books", bookAPI.List)
 		r.Post("/books", bookAPI.Create)
 		r.Get("/books/{id}", bookAPI.Read)
