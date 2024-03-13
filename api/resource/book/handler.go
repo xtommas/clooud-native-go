@@ -5,18 +5,24 @@ import (
 	"fmt"
 	"net/http"
 
+	e "myapp/api/resource/common/err"
+
 	"github.com/go-chi/chi/v5"
+	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	validatorUtil "myapp/util/validator"
 )
 
 type API struct {
 	repository *Repository
+	validator  *validator.Validate
 }
 
-func New(db *gorm.DB) *API {
+func New(db *gorm.DB, v *validator.Validate) *API {
 	return &API{
 		repository: NewRepository(db),
+		validator:  v,
 	}
 }
 
@@ -33,7 +39,7 @@ func New(db *gorm.DB) *API {
 func (a *API) List(w http.ResponseWriter, r *http.Request) {
 	books, err := a.repository.List()
 	if err != nil {
-		// handle later
+		e.ServerError(w, e.RespDBDataAccessFailure)
 		return
 	}
 
@@ -43,7 +49,7 @@ func (a *API) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewEncoder(w).Encode(books.ToDto()); err != nil {
-		// handle later
+		e.ServerError(w, e.RespJSONEncodeFailure)
 		return
 	}
 }
@@ -64,7 +70,18 @@ func (a *API) List(w http.ResponseWriter, r *http.Request) {
 func (a *API) Create(w http.ResponseWriter, r *http.Request) {
 	form := &Form{}
 	if err := json.NewDecoder(r.Body).Decode(form); err != nil {
-		// handle later
+		e.ServerError(w, e.RespJSONDecodeFailure)
+		return
+	}
+
+	if err := a.validator.Struct(form); err != nil {
+		respBody, err := json.Marshal(validatorUtil.ToErrResponse(err))
+		if err != nil {
+			e.ServerError(w, e.RespJSONEncodeFailure)
+			return
+		}
+
+		e.ValidationErrors(w, respBody)
 		return
 	}
 
@@ -73,7 +90,7 @@ func (a *API) Create(w http.ResponseWriter, r *http.Request) {
 
 	_, err := a.repository.Create(newBook)
 	if err != nil {
-		// handle later
+		e.ServerError(w, e.RespDBDataInsertFailure)
 		return
 	}
 
@@ -96,7 +113,7 @@ func (a *API) Create(w http.ResponseWriter, r *http.Request) {
 func (a *API) Read(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		// handle later
+		e.BadRequest(w, e.RespInvalidURLParamID)
 		return
 	}
 
@@ -107,13 +124,13 @@ func (a *API) Read(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// handle later
+		e.ServerError(w, e.RespDBDataAccessFailure)
 		return
 	}
 
 	dto := book.ToDto()
 	if err := json.NewEncoder(w).Encode(dto); err != nil {
-		// handle later
+		e.ServerError(w, e.RespJSONEncodeFailure)
 		return
 	}
 }
@@ -136,13 +153,24 @@ func (a *API) Read(w http.ResponseWriter, r *http.Request) {
 func (a *API) Update(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		// handle later
+		e.BadRequest(w, e.RespInvalidURLParamID)
 		return
 	}
 
 	form := &Form{}
 	if err := json.NewDecoder(r.Body).Decode(form); err != nil {
-		// handle leader
+		e.ServerError(w, e.RespJSONDecodeFailure)
+		return
+	}
+
+	if err := a.validator.Struct(form); err != nil {
+		respBody, err := json.Marshal(validatorUtil.ToErrResponse(err))
+		if err != nil {
+			e.ServerError(w, e.RespJSONEncodeFailure)
+			return
+		}
+
+		e.ValidationErrors(w, respBody)
 		return
 	}
 
@@ -151,7 +179,7 @@ func (a *API) Update(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := a.repository.Update(book)
 	if err != nil {
-		// handle later
+		e.ServerError(w, e.RespDBDataUpdateFailure)
 		return
 	}
 	if rows == 0 {
@@ -176,13 +204,13 @@ func (a *API) Update(w http.ResponseWriter, r *http.Request) {
 func (a *API) Delete(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		// handle later
+		e.BadRequest(w, e.RespInvalidURLParamID)
 		return
 	}
 
 	rows, err := a.repository.Delete(id)
 	if err != nil {
-		// handle later
+		e.BadRequest(w, e.RespDBDataRemoveFailure)
 		return
 	}
 	if rows == 0 {
